@@ -100,58 +100,52 @@ void CVezbaView::DrawAxes(CDC* pDC)
 void CVezbaView::DrawTransparent(CDC* pDC, DImage* img, bool isBlue) {
 
 	
-	int w = img->Width();// sirana originalne slike, kad kazem slika mislim sa sve pozadion i puzlom
-	int h = img->Height();// visina originalne slike
+	int w = img->Width();
+	int h = img->Height();
 
-	CBitmap srcBitmap;// bitmapa za sliku u boji
-	srcBitmap.CreateCompatibleBitmap(pDC, w, h);//
+	CBitmap srcBitmap;
+	srcBitmap.CreateCompatibleBitmap(pDC, w, h);
 
 	CBitmap maskBitmap;
-	maskBitmap.CreateBitmap(w, h, 1, 1, nullptr); // monohromatska bitmapa (crno-bela)
+	maskBitmap.CreateBitmap(w, h, 1, 1, nullptr); 
 
-	CDC* srcDC = new CDC(); // kao da pravis virtuelni ekran u memoriji, za sliku u boji
+	CDC* srcDC = new CDC(); 
 	srcDC->CreateCompatibleDC(pDC);
 
-	CDC* dstDC = new CDC(); // kao da pravis virtuelni ekran u memoriji, za masku
+	CDC* dstDC = new CDC(); 
 	dstDC->CreateCompatibleDC(pDC);
 
-	CBitmap* oldSrcBitmap = srcDC->SelectObject(&srcBitmap);// ovo je isti djavo ko za olovku brush i to ovi stari se prave jer je kao dobra praksa
+	CBitmap* oldSrcBitmap = srcDC->SelectObject(&srcBitmap);
 	CBitmap* oldDstBitmap = dstDC->SelectObject(&maskBitmap);
 
-	//pravi src i dest CRect koji ce da crta puzzlePieces pojedinacno u srcDC
-	img->Draw(srcDC, CRect(0, 0, w, h), CRect(0, 0, w, h));//Ucitavamo originalnu sliku (sa sve zelenom pozadinom) na srcDC.
-	// deo puzzle koji je plav
+	
+	img->Draw(srcDC, CRect(0, 0, w, h), CRect(0, 0, w, h));
+
 	if (isBlue)
 		makeBlue(&srcBitmap);
 	else
 		makeGray(&srcBitmap);
 
-	// sad je svaki deo puzle ili sive ili plave boje ali ima pozadinu
-	// sada uklanjamo pozadinu postupkom sa slajdova
 
-	// 1 korak - kopiramo RGB bitmapu na monohromatsku -> pozadina bela (1), objekat crn (0)
+	COLORREF trColor = srcDC->GetPixel(0, 0); 
+	COLORREF oldBgColor = srcDC->SetBkColor(trColor); 
 
-	COLORREF trColor = srcDC->GetPixel(0, 0); // uzimamo piksel 0,0
-	COLORREF oldBgColor = srcDC->SetBkColor(trColor); // stavljamo pozadinu na boju piksela 0,0
-
-	dstDC->BitBlt(0, 0, w, h, srcDC, 0, 0, SRCCOPY);// u dst je pozadina bela a puzla crna
-
-	// 2 korak - vrsimo AND operaciju, pri cemu je sad objekat RGB, a pozadina crna
-
-	// za novi srcDC, pozadina ce se tretirati kao crna boja (0), objekat kao bela (1)
-	COLORREF oldTextColorSrc = srcDC->SetTextColor(RGB(255, 255, 255));// ja ovde takoreci bojim puzlicu u belo
-	COLORREF oldBackgroundColorSrc = srcDC->SetBkColor(RGB(0, 0, 0));// a pozadina koja je bila nekad zelena ide u crno
-
-	srcDC->BitBlt(0, 0, w, h, dstDC, 0, 0, SRCAND);// e sad ja kad endujem belu masku u obliku puzle sa puzlom ja cu samo puzlu da izdvojim
+	dstDC->BitBlt(0, 0, w, h, srcDC, 0, 0, SRCCOPY);
 
 	
-	Translate(pDC, -w / 2, -h / 2); // pomeramo koordinatni pocetak u centar slike
+	COLORREF oldTextColorSrc = srcDC->SetTextColor(RGB(255, 255, 255));
+	COLORREF oldBackgroundColorSrc = srcDC->SetBkColor(RGB(0, 0, 0));
 
-	pDC->BitBlt(0, 0, w, h, dstDC, 0, 0, SRCAND); // u pDC - pozadina ce biti bele boje, objekat crne
+	srcDC->BitBlt(0, 0, w, h, dstDC, 0, 0, SRCAND);
 
-	pDC->BitBlt(0, 0, w, h, srcDC, 0, 0, SRCPAINT); // "lepimo" srcDC preko pDC, SRCPAINT radi OR
+	
+	Translate(pDC, -w / 2, -h / 2); 
 
-	Translate(pDC, w / 2, h / 2); // vracamo koordinatni pocetak u prethodni polozaj
+	pDC->BitBlt(0, 0, w, h, dstDC, 0, 0, SRCAND); 
+
+	pDC->BitBlt(0, 0, w, h, srcDC, 0, 0, SRCPAINT); 
+
+	Translate(pDC, w / 2, h / 2); 
 	//DrawCenter(pDC);
 
 	//srcDC->SetTextColor(oldTextColorSrc);
@@ -166,20 +160,18 @@ void CVezbaView::DrawTransparent(CDC* pDC, DImage* img, bool isBlue) {
 	dstDC->DeleteDC();
 	delete dstDC;
 }
-void CVezbaView::makeGray(CBitmap* bitmap) {// finalni izlaz ove metode ti je puzla koja je pretvorena u sivkastu boju ali jos uvek ima zelenu pozadinu
+void CVezbaView::makeGray(CBitmap* bitmap) {
 	BITMAP b;
 	bitmap->GetBitmap(&b);
 
-	BYTE* bits = new BYTE[b.bmWidthBytes * b.bmHeight];// alociram bits
-	bitmap->GetBitmapBits(b.bmWidthBytes * b.bmHeight, bits);// ovde iz bitmape prebacujem sve bitove slike u novo alocirani niz bits
-	COLORREF trColor = RGB(bits[2], bits[1], bits[0]);// Dakle: bits[0] je Plava prvog piksela, 
-													  //bits[1] Zelena, bits[2] Crvena. 
-													  // postoji i neki cetvrti magicni za alfa zato nam je dole u for korak +=4.
-													  //Logika ovde je: Gornji levi piksel (0,0) je sigurno pozadina. jer sa ovim bits[2], bits[1], bits[0] mi sigurno pristupamo prvom pikselu na slici gore levo
-	for (int i = 0; i < b.bmWidthBytes * b.bmHeight; i += 4)// korak je 4 jer na svaka 4 bita pocinje novi piksel
+	BYTE* bits = new BYTE[b.bmWidthBytes * b.bmHeight];
+	bitmap->GetBitmapBits(b.bmWidthBytes * b.bmHeight, bits);
+	COLORREF trColor = RGB(bits[2], bits[1], bits[0]);
+													  
+	for (int i = 0; i < b.bmWidthBytes * b.bmHeight; i += 4)
 	{
-		if (RGB(bits[i + 2], bits[i + 1], bits[i]) == trColor) continue;// ako smo na pozadini onda preskacemo pozadinu, 
-		BYTE gr = min(255, (bits[i] + bits[i + 1] + bits[i + 2]) / 3 + 64);// racunas
+		if (RGB(bits[i + 2], bits[i + 1], bits[i]) == trColor) continue;
+		BYTE gr = min(255, (bits[i] + bits[i + 1] + bits[i + 2]) / 3 + 64);
 		bits[i] = bits[i + 1] = bits[i + 2] = gr;
 	}
 
@@ -190,31 +182,30 @@ void CVezbaView::makeGray(CBitmap* bitmap) {// finalni izlaz ove metode ti je pu
 
 	bits = nullptr;
 }
-void CVezbaView::makeBlue(CBitmap* bitmap) {// finalni izlaz ove metode ti je puzla koja je pretvorena u plavicuastu boju ali jos uvek ima zelenu pozadinu
+void CVezbaView::makeBlue(CBitmap* bitmap) {
 
 	BITMAP b;
-	bitmap->GetBitmap(&b); // u promenljivoj b dobijamo informacije o izvornoj bitmapi
+	bitmap->GetBitmap(&b); 
 
-	// bmWidthBytes - svaka scan-linija (vrsta u bitmapi) mora imati dužinu koja je celobrojni umnožak 32 bita 
-	// pr. 4,8,12,16... u jednom redu * visina = matrica piksela
-	BYTE* bits = new BYTE[b.bmWidthBytes * b.bmHeight]; // niz vrednosti
+	
+	BYTE* bits = new BYTE[b.bmWidthBytes * b.bmHeight]; 
 	bitmap->GetBitmapBits(b.bmWidthBytes * b.bmHeight, bits);
 
-	// uzimamo vr. prvog piksela koji ce da bude pozadina
-	COLORREF trColor = RGB(bits[2], bits[1], bits[0]);// ovde uzimas zelenu
+	
+	COLORREF trColor = RGB(bits[2], bits[1], bits[0]);
 
 	for (int i = 0; i < b.bmWidthBytes * b.bmHeight; i += 4) {
 		if (RGB(bits[i + 2], bits[i + 1], bits[i]) == trColor) continue;
 		// max(gr) = 255, if bits[i] > gr => bits[i] = 255 else bits[i] = gr
 		BYTE gr = min(255, (bits[i] + bits[i + 1] + bits[i + 2]) / 3 + 64);
-		bits[i] = 0;// ubacujem u plavi kanal
+		bits[i] = 0;
 		bits[i + 1] = gr;
-		bits[i + 2] = 0; // B,G,R - 2 preostala kanala se setuju na 0
+		bits[i + 2] = 0; 
 	}
 
-	bitmap->SetBitmapBits(b.bmWidthBytes * b.bmHeight, bits);// SetBitmapBits: Do sada smo menjali samo niz u RAM memoriji. 
-															//Slika na ekranu/objektu se nije promenila. 
-															// Ovom komandom kopiramo izmenjene podatke nazad u bitmap objekat.
+	bitmap->SetBitmapBits(b.bmWidthBytes * b.bmHeight, bits);
+															
+															
 
 	if (bits)
 		delete[] bits;
